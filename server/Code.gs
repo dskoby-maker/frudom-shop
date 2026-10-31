@@ -1,7 +1,7 @@
 /**
  * Сервер магазина «Фруктовый Дом» (frudom.ru).
  * Живёт в таблице «Магазин Фруктовый Дом» → Расширения → Apps Script → файл Code.gs.
- * Листы: «Витрина» (товары и цены), «Заказы с сайта» (сюда пишутся заказы), «Товары» (цены из «Документы ФД», только чтение).
+ * Листы: «Витрина» (товары и цены; колонка Q — описание товара для сайта), «Заказы с сайта» (сюда пишутся заказы), «Товары» (цены из «Документы ФД», только чтение).
  * Таблицу «Документы ФД» этот скрипт НЕ трогает.
  *
  * Что умеет:
@@ -39,7 +39,7 @@ function shopItems_() {
   if (!sh) return null;
   const n = sh.getLastRow();
   if (n < 2) return [];
-  const rows = sh.getRange(2, 1, n - 1, 16).getDisplayValues(), out = [];
+  const rows = sh.getRange(2, 1, n - 1, 17).getDisplayValues(), out = [];
   rows.forEach((r, i) => {
     const name = str_(r[0], 120), p = num_(r[8]);
     if (!name || !(p > 0) || String(r[2]).trim().toLowerCase() !== 'да') return;
@@ -47,6 +47,7 @@ function shopItems_() {
     const pack = str_(r[10], 30).toLowerCase(), step = num_(r[11]), th = num_(r[12]), pk = num_(r[9]);
     if (pack && step > 0 && th > 0 && pk > 0) Object.assign(o, { pk: pk, pack: pack, step: step, th: th });
     if (/^https:\/\//.test(r[15])) o.img = str_(r[15], 500);
+    if (str_(r[16], 3000)) o.d = str_(r[16], 3000);      /* колонка Q «Описание для сайта» */
     out.push(o);
   });
   return out.sort((a, b) => a.o - b.o);
