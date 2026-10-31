@@ -80,7 +80,8 @@ function shopOrder_(p) {
     const pr = PropertiesService.getScriptProperties();
     no = (parseInt(pr.getProperty('shopNo') || '1000', 10) || 1000) + 1; pr.setProperty('shopNo', String(no));
     const ss = SpreadsheetApp.getActive(); let sh = ss.getSheetByName(SHOP_ORDERS);
-    if (!sh) { sh = ss.insertSheet(SHOP_ORDERS); sh.getRange(1, 1, 1, SHOP_ORDER_COLS.length).setValues([SHOP_ORDER_COLS]); sh.setFrozenRows(1); }
+    if (!sh) sh = ss.insertSheet(SHOP_ORDERS);
+    if (sh.getLastRow() === 0) { sh.getRange(1, 1, 1, SHOP_ORDER_COLS.length).setValues([SHOP_ORDER_COLS]); sh.setFrozenRows(1); }
     const list = lines.map(l => l.n + ' — ' + String(l.qty).replace('.', ',') + ' кг × ' + l.price + ' ₽' + (l.known ? '' : ' (нет на витрине!)')).join('\n');
     const row = [no, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm'), who === 'nds' ? 'С НДС (счёт)' : 'Без НДС', 'Новый',
       who === 'nds' ? str_(co.name) : str_(o.name, 100), phone, str_(who === 'nds' ? co.email : o.email, 100), str_(o.addr || co.daddr, 300), str_(o.comment, 500),
