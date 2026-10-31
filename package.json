@@ -1,0 +1,13 @@
+{
+  "name": "frudom-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Сайт frudom.ru — каталог и заказы «Фруктовый Дом»",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node -e \"require('./lib/render.js');console.log('ok')\"",
+    "test": "node test/site-check.js"
+  },
+  "engines": { "node": ">=20" }
+}
