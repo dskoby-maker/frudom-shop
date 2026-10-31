@@ -13,6 +13,7 @@ v.data.push(['Название','Категория','Показывать','П�
  ['Скрытый товар','Овощи','нет','3','x','','10','','10','11','','','','да','10',''],
  ['Без цены','Овощи','да','4','x','','','','','','','','','да','10',''],
  ['Кешью','Орехи и семена','да','5','x','','1190','','1190','1309','','','','нет','10','']);
+sheets['Заказы с сайта']=mkSheet('Заказы с сайта'); /* лист есть, но пустой — как в настоящей таблице */
 const ss={getSheetByName:n=>sheets[n]||null,insertSheet:n=>(sheets[n]=mkSheet(n)),getName:()=>'Магазин'};
 const ctx={SpreadsheetApp:{getActive:()=>ss},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   ContentService:{MimeType:{JSON:'json'},createTextOutput:t=>({t,setMimeType(){return this}})},
