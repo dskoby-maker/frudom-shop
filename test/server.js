@@ -17,7 +17,7 @@ sheets['Заказы с сайта']=mkSheet('Заказы с сайта'); /* �
 const ss={getSheetByName:n=>sheets[n]||null,insertSheet:n=>(sheets[n]=mkSheet(n)),getName:()=>'Магазин'};
 const ctx={SpreadsheetApp:{getActive:()=>ss},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},
   ContentService:{MimeType:{JSON:'json'},createTextOutput:t=>({t,setMimeType(){return this}})},
-  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v}})},
+  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v},deleteProperty:k=>{delete props[k]}})},
   Session:{getScriptTimeZone:()=>'Europe/Moscow',getEffectiveUser:()=>({getEmail:()=>'owner@test'})},
   MailApp:{sent:[],sendEmail(to,subj,body){this.sent.push({to,subj})},getRemainingDailyQuota:()=>100},
   Utilities:{formatDate:(d,tz,f)=>{const m=new Date(d.getTime()+3*3600000),p=n=>String(n).padStart(2,'0');
