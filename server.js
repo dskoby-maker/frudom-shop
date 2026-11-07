@@ -2,6 +2,41 @@
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib');
 const D = require('./lib/data.js'), R = require('./lib/render.js');
 
+/* База заказов включается переменной ORDERS_DB: адрес облачной PostgreSQL (postgres://…) или путь к файлу SQLite (для проверки).
+   Без неё — как раньше: заказ сразу уходит в Google Таблицу. Пока база не подключилась (или недоступна) — тоже в таблицу, заказы не теряются. */
+let DB = null, O = null, OB = null, ADMIN = null, DB_STATE = null;   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
+if (process.env.ORDERS_DB) {
+  const DBL = require('./lib/db.js'); O = require('./lib/orders.js'); OB = require('./lib/outbox.js');
+  const where = DBL.describe(process.env.ORDERS_DB);
+  DB_STATE = 'подключается';
+  const initDb = async () => {
+    try {
+      const db = await DBL.open(process.env.ORDERS_DB);
+      await OB.recover(db);
+      ADMIN = require('./lib/admin.js').create({ DB: db, O, D, auth: require('./lib/auth.js').create(process.env.ADMIN_USERS), send, clientIp });
+      DB = db; DB_STATE = 'ok';
+      console.log('База заказов подключена: ' + where);
+      const tick = () => OB.runOnce(DB, O.getOrder, D.sendOrder).catch(e => console.error('Очередь:', e.message));
+      setInterval(tick, 30000).unref(); setTimeout(tick, 2000).unref();
+      /* копия файла базы раз в сутки (только SQLite; у PostgreSQL копии делает хостинг) */
+      const BK_DIR = process.env.ORDERS_BACKUP_DIR;
+      if (BK_DIR && db.kind === 'sqlite') {
+        const doBackup = async () => { try {
+          fs.mkdirSync(BK_DIR, { recursive: true });
+          await DBL.backup(DB, path.join(BK_DIR, 'orders-' + new Date().toISOString().slice(0, 10) + '.db'));
+          fs.readdirSync(BK_DIR).filter(f => /^orders-.*\.db$/.test(f)).sort().slice(0, -14).forEach(f => fs.unlinkSync(path.join(BK_DIR, f)));
+        } catch (e) { console.error('Копия базы не сделана:', e.message); } };
+        setInterval(doBackup, 24 * 3600000).unref(); setTimeout(doBackup, 60000).unref();
+      }
+    } catch (e) {
+      DB_STATE = 'ошибка: ' + String(e.message || e).slice(0, 200);
+      console.error('База заказов (' + where + ') не подключилась, повтор через 30 с:', e.message);
+      setTimeout(initDb, 30000).unref();
+    }
+  };
+  initDb();
+}
+
 const PORT = +process.env.PORT || 3000;
 /* Генератор документов остаётся в Тильде: адрес /1c пропускаем на страницу Тильды без изменений.
    Если Тильда не отдаёт страницу (например, перенаправляет), показываем тот же генератор с GitHub. */
@@ -73,6 +108,11 @@ async function handle(req, res) {
   const u = new URL(req.url, 'http://local');
   let p = decodeURIComponent(u.pathname).replace(/\/{2,}/g, '/');
   if (p === '/1c' || p.startsWith('/1c/')) return proxy1c(req, res, u);
+  if (p === '/admin' || p.startsWith('/admin/')) {
+    if (!ADMIN) return DB_STATE ? send(req, res, 503, 'text/plain; charset=utf-8', 'База заказов ещё подключается — обновите страницу через минуту', { 'x-robots-tag': 'noindex', 'retry-after': '30' })
+      : send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });
+    return ADMIN(req, res, p === '/admin/' ? '/admin' : p, u);
+  }
   if (REDIRECTS[p]) return redirect(res, REDIRECTS[p] + (u.search || ''));
   if (p.length > 1 && p.endsWith('/')) return redirect(res, p.replace(/\/+$/, '') + (u.search || ''));
 
@@ -83,6 +123,17 @@ async function handle(req, res) {
     try { const body = JSON.parse(await readBody(req, 100000)); order = cleanOrder(body && body.order); }
     catch (e) { return send(req, res, 400, 'application/json', JSON.stringify({ ok: false, error: 'неверный запрос' })); }
     if (!order) return send(req, res, 400, 'application/json', JSON.stringify({ ok: false, error: 'пустой заказ' }));
+    if (DB) {
+      try {
+        const c = await D.getCatalog();
+        const r = await O.createOrder(DB, order, { items: c.items, source: c.source, at: c.fetchedAt, updated: c.updated }, { channel: 'site' });
+        return send(req, res, 200, 'application/json', JSON.stringify(r), { 'cache-control': 'no-store' });
+      } catch (e) {
+        /* база не ответила — заказ не теряем: отправляем сразу в таблицу, как без базы (с пометкой) */
+        console.error('Заказ не записан в базу, отправляю в таблицу:', e.message);
+        order.comment = ('БАЗА НЕДОСТУПНА · ' + (order.comment || '')).slice(0, 500);
+      }
+    }
     try {
       const r = await D.sendOrder(order);
       return send(req, res, 200, 'application/json', JSON.stringify(r && typeof r === 'object' ? r : { ok: false, error: 'сервер заказов не ответил' }), { 'cache-control': 'no-store' });
@@ -95,7 +146,13 @@ async function handle(req, res) {
     if (!f.startsWith(PUB) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено');
     return send(req, res, 200, TYPES[path.extname(f)] || 'application/octet-stream', fs.readFileSync(f), { 'cache-control': u.search ? 'public, max-age=31536000, immutable' : 'public, max-age=3600' });
   }
-  if (p === '/health') { const c = await D.getCatalog(); return send(req, res, 200, 'application/json', JSON.stringify({ ok: true, items: c.items.length, source: c.source, updated: c.updated })); }
+  if (p === '/health') {
+    const c = await D.getCatalog(), h = { ok: true, items: c.items.length, source: c.source, updated: c.updated, pricesAgeMin: c.fetchedAt ? Math.round((Date.now() - c.fetchedAt) / 60000) : null };
+    /* проблемы базы — в поле warn, а не ошибкой: хостинг проверяет /health и перезапускал бы сайт, хотя заказы и без базы уходят в таблицу */
+    if (DB) { try { await require('./lib/db.js').check(DB); h.db = 'ok'; h.queue = await OB.stats(DB); if (h.queue.failed) h.warn = 'есть заказы, не попавшие в таблицу'; } catch (e) { h.db = 'ошибка'; h.warn = 'база не отвечает'; } }
+    else if (DB_STATE) { h.db = DB_STATE === 'подключается' ? DB_STATE : 'ошибка (подробности — в логах приложения)'; h.warn = 'база не подключена — заказы идут сразу в таблицу'; }
+    return send(req, res, h.ok ? 200 : 503, 'application/json', JSON.stringify(h), { 'cache-control': 'no-store' });
+  }
   if (p === '/favicon.ico') return send(req, res, 200, TYPES['.svg'], fs.readFileSync(path.join(PUB, 'favicon.svg')), { 'cache-control': 'public, max-age=86400' });
 
   const cat = await D.getCatalog();
