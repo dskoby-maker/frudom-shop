@@ -12,7 +12,7 @@ const PUB = path.join(__dirname, 'public');
 const TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.txt': 'text/plain; charset=utf-8' };
 
 function send(req, res, status, type, body, extra) {
-  const h = Object.assign({ 'content-type': type, 'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin' }, extra || {});
+  const h = Object.assign({ 'content-type': type, 'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin', 'x-frame-options': 'SAMEORIGIN', 'permissions-policy': 'camera=(), microphone=(), geolocation=()' }, extra || {});
   let buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   if (buf.length > 1024 && /text|javascript|json|xml|svg/.test(type) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) { buf = zlib.gzipSync(buf); h['content-encoding'] = 'gzip'; h.vary = 'Accept-Encoding'; }
   h['content-length'] = buf.length;
@@ -25,9 +25,34 @@ function readBody(req, max) {
   return new Promise((ok, no) => { let n = 0; const ch = []; req.on('data', d => { n += d.length; if (n > max) { no(new Error('слишком большой заказ')); req.destroy(); } else ch.push(d); }); req.on('end', () => ok(Buffer.concat(ch).toString('utf8'))); req.on('error', no); });
 }
 
-/* простая защита от потока роботов: не больше 10 заказов в 10 минут с одного адреса */
+/* простая защита от потока роботов: не больше 10 заказов в 10 минут с одного адреса.
+   Адрес посетителя: TRUST_PROXY=N — сколько своих прокси стоит перед сайтом (у Timeweb обычно 1). Без настройки — адрес соединения,
+   заголовку X-Forwarded-For не верим (его может подделать кто угодно). */
+const TRUST_PROXY = Math.max(0, parseInt(process.env.TRUST_PROXY || '0', 10) || 0);
+function clientIp(req) {
+  const sock = String(req.socket.remoteAddress || '');
+  if (!TRUST_PROXY) return sock;
+  const chain = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean);
+  return chain[chain.length - TRUST_PROXY] || sock;
+}
 const hits = new Map();
-function tooMany(ip) { const now = Date.now(), a = (hits.get(ip) || []).filter(t => now - t < 600000); a.push(now); hits.set(ip, a); return a.length > 10; }
+function tooMany(ip) {
+  const now = Date.now(), a = (hits.get(ip) || []).filter(t => now - t < 600000); a.push(now); hits.set(ip, a);
+  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some(t => now - t < 600000)) hits.delete(k);
+  return a.length > 10;
+}
+/* Из браузера принимаем только то, что нужно для заказа. Цена, доставка, НДС и сумма товаров не передаются: их считает таблица. */
+const s_ = (v, n) => typeof v === 'string' || typeof v === 'number' ? String(v).slice(0, n) : undefined;
+function cleanOrder(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const items = Array.isArray(o.items) ? o.items.slice(0, 81).map(l => (l && typeof l === 'object') ? { n: s_(l.n, 120), qty: typeof l.qty === 'number' ? l.qty : s_(l.qty, 20), mode: s_(l.mode, 8) } : {}) : [];
+  const co = o.company && typeof o.company === 'object' ? o.company : null;
+  const out = { who: s_(o.who, 8), zone: s_(o.zone, 8), items, name: s_(o.name, 100), phone: s_(o.phone, 40), email: s_(o.email, 100), addr: s_(o.addr, 300),
+    comment: s_(o.comment, 500), total: typeof o.total === 'number' ? o.total : s_(o.total, 20), key: s_(o.key, 64), hp: s_(o.hp, 50) };
+  if (co) out.company = ['inn', 'kpp', 'ogrn', 'name', 'addr', 'email', 'phone', 'daddr'].reduce((m, k) => { m[k] = s_(co[k], 300); return m; }, {});
+  Object.keys(out).forEach(k => out[k] === undefined && delete out[k]);
+  return out;
+}
 
 async function proxy1c(req, res, u) {
   const tryFetch = async (target) => { const r = await fetch(target, { redirect: 'manual', headers: { 'user-agent': req.headers['user-agent'] || 'frudom-site' } }); if (r.status !== 200) throw new Error('HTTP ' + r.status); return r; };
@@ -52,12 +77,15 @@ async function handle(req, res) {
   if (p.length > 1 && p.endsWith('/')) return redirect(res, p.replace(/\/+$/, '') + (u.search || ''));
 
   if (p === '/api/order' && req.method === 'POST') {
-    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-    if (tooMany(ip)) return send(req, res, 429, 'application/json', JSON.stringify({ ok: false, error: 'слишком много заказов подряд, позвоните нам' }));
+    if (tooMany(clientIp(req))) return send(req, res, 429, 'application/json', JSON.stringify({ ok: false, error: 'слишком много заказов подряд, позвоните нам' }));
+    if (!/application\/json/.test(req.headers['content-type'] || '')) return send(req, res, 415, 'application/json', JSON.stringify({ ok: false, error: 'неверный запрос' }));
+    let order;
+    try { const body = JSON.parse(await readBody(req, 100000)); order = cleanOrder(body && body.order); }
+    catch (e) { return send(req, res, 400, 'application/json', JSON.stringify({ ok: false, error: 'неверный запрос' })); }
+    if (!order) return send(req, res, 400, 'application/json', JSON.stringify({ ok: false, error: 'пустой заказ' }));
     try {
-      const body = JSON.parse(await readBody(req, 100000));
-      const r = await D.sendOrder(body.order || {});
-      return send(req, res, 200, 'application/json', JSON.stringify(r));
+      const r = await D.sendOrder(order);
+      return send(req, res, 200, 'application/json', JSON.stringify(r && typeof r === 'object' ? r : { ok: false, error: 'сервер заказов не ответил' }), { 'cache-control': 'no-store' });
     } catch (e) { console.error('Заказ не отправлен:', e.message); return send(req, res, 502, 'application/json', JSON.stringify({ ok: false, error: 'сервер заказов не ответил' })); }
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(req, res, 405, 'text/plain; charset=utf-8', 'Method not allowed');

@@ -708,15 +708,20 @@ function guestSend(){
   <button class="bsec" style="margin-top:18px" onclick="closeModal()">Вернуться в каталог</button></div>`);
  });
 }
-function orderItems(){return Object.keys(cart).map(id=>{const p=P.find(x=>x.id==id),k=cart[id],m=mode[id]||"pack";return {n:p.n,qty:+k.toFixed(2),mode:p.pk?m:"kg",price:unit(p,k,m)}})}
+function orderItems(){return Object.keys(cart).map(id=>{const p=P.find(x=>x.id==id),k=cart[id],m=mode[id]||"pack";return {n:p.n,qty:+k.toFixed(2),mode:p.pk?m:"kg"}})}
+function orderKey(sig){try{const s=JSON.parse(sessionStorage.getItem("fs_okey")||"null");if(s&&s.sig===sig)return s.k}catch(e){}const k=Date.now().toString(36)+Math.random().toString(36).slice(2,12);try{sessionStorage.setItem("fs_okey",JSON.stringify({sig:sig,k:k}))}catch(e){}return k}
+function orderKeyDone(){try{sessionStorage.removeItem("fs_okey")}catch(e){}}
 function sendOrder(o,btn,ok){
+ if(sendOrder.busy)return; /* защита от двойной отправки */
  if(!API){toast("Приём заказов временно недоступен. Позвоните +7 999 833-05-53");return}
- const t=totals(), txt=btn?btn.textContent:"";
+ const t=totals(), txt=btn?btn.textContent:"", items=orderItems(), key=orderKey(JSON.stringify([items,o.who,zone]));
+ sendOrder.busy=true;
  if(btn){btn.disabled=true;btn.textContent="Отправляем…"}
- fetch(API,{method:"POST",body:JSON.stringify({action:"shopOrder",order:Object.assign(o,{zone,items:orderItems(),goods:t.sum,fee:t.fee,vat:t.vat,total:t.total})})})
-  .then(r=>r.json()).then(r=>{if(!r.ok)throw new Error(r.error||"ошибка");ok(r)})
+ /* цену, доставку и НДС считает сервер; итог отправляем только для сверки */
+ fetch(API,{method:"POST",body:JSON.stringify({action:"shopOrder",order:Object.assign(o,{zone,items,total:t.total,key})})})
+  .then(r=>r.json()).then(r=>{if(r.code==="prices_changed"){toast("Цены обновились. Новая сумма — "+f(r.total)+". Обновите страницу и проверьте заказ.");return}if(!r.ok)throw new Error(r.error||"ошибка");orderKeyDone();ok(r)})
   .catch(e=>{toast("Не удалось отправить заказ ("+(e.message||"нет связи")+"). Позвоните +7 999 833-05-53")})
-  .finally(()=>{if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent=txt}});
+  .finally(()=>{sendOrder.busy=false;if(btn&&document.body.contains(btn)){btn.disabled=false;btn.textContent=txt}});
 }
 const esc=v=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function ld(k){try{return JSON.parse(localStorage.getItem(k)||"null")}catch(e){return null}}

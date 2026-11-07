@@ -108,14 +108,24 @@
         '<p class="hint" style="margin-top:10px">Ориентировочная доставка — ' + deliv() + '</p><button type="button" class="bsec" style="margin-top:18px" data-close="modal">Вернуться в каталог</button></div>');
     });
   }
-  function orderItems() { return Object.keys(cart).map(s => { const p = P[s], k = cart[s], m = md(s); return { n: p.n, qty: +k.toFixed(2), mode: p.pk ? m : 'kg', price: unit(p, k, m) }; }); }
+  function orderItems() { return Object.keys(cart).map(s => { const p = P[s], k = cart[s], m = md(s); return { n: p.n, qty: +k.toFixed(2), mode: p.pk ? m : 'kg' }; }); }
+  function orderKey(sig){try{const s=JSON.parse(sessionStorage.getItem("fs_okey")||"null");if(s&&s.sig===sig)return s.k}catch(e){}const k=Date.now().toString(36)+Math.random().toString(36).slice(2,12);try{sessionStorage.setItem("fs_okey",JSON.stringify({sig:sig,k:k}))}catch(e){}return k}
+  function orderKeyDone(){try{sessionStorage.removeItem("fs_okey")}catch(e){}}
   function sendOrder(o, btn, ok) {
-    const t = totals(), txt = btn ? btn.textContent : '';
+    if (sendOrder.busy) return;                               /* второе нажатие, пока идёт отправка, — не считаем */
+    const t = totals(), txt = btn ? btn.textContent : '', items = orderItems();
+    const key = orderKey(JSON.stringify([items, o.who, zone]));
+    sendOrder.busy = true;
     if (btn) { btn.disabled = true; btn.textContent = 'Отправляем…'; }
-    fetch('/api/order', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ order: Object.assign(o, { zone, items: orderItems(), goods: t.sum, fee: t.fee, vat: t.vat, total: t.total }) }) })
-      .then(r => r.json()).then(r => { if (!r.ok) throw new Error(r.error || 'ошибка'); ok(r); })
+    /* цену, доставку и НДС считает сервер; итог отправляем только для сверки */
+    fetch('/api/order', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ order: Object.assign(o, { zone, items, total: t.total, key }) }) })
+      .then(r => r.json()).then(r => {
+        if (r.code === 'prices_changed') { toast('Цены обновились. Новая сумма — ' + f(r.total) + '. Страница обновится, проверьте заказ.'); setTimeout(() => location.reload(), 3000); return; }
+        if (!r.ok) throw new Error(r.error || 'ошибка');
+        orderKeyDone(); ok(r);
+      })
       .catch(e => toast('Не удалось отправить заказ (' + (e.message || 'нет связи') + '). Позвоните +7 999 833-05-53'))
-      .finally(() => { if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = txt; } });
+      .finally(() => { sendOrder.busy = false; if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = txt; } });
   }
   function clearCart() { const was = Object.keys(cart); cart = {}; save(); was.forEach(s => paint(s)); renderCart(); }
 
