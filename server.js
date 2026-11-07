@@ -2,25 +2,39 @@
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib');
 const D = require('./lib/data.js'), R = require('./lib/render.js');
 
-/* База заказов включается переменной ORDERS_DB (путь к файлу базы). Без неё — как раньше: заказ сразу уходит в Google Таблицу. */
-let DB = null, O = null, OB = null, ADMIN = null;   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
+/* База заказов включается переменной ORDERS_DB: адрес облачной PostgreSQL (postgres://…) или путь к файлу SQLite (для проверки).
+   Без неё — как раньше: заказ сразу уходит в Google Таблицу. Пока база не подключилась (или недоступна) — тоже в таблицу, заказы не теряются. */
+let DB = null, O = null, OB = null, ADMIN = null, DB_STATE = null;   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
 if (process.env.ORDERS_DB) {
   const DBL = require('./lib/db.js'); O = require('./lib/orders.js'); OB = require('./lib/outbox.js');
-  DB = DBL.open(process.env.ORDERS_DB);
-  ADMIN = require('./lib/admin.js').create({ DB, O, D, auth: require('./lib/auth.js').create(process.env.ADMIN_USERS), send, clientIp });
-  OB.recover(DB);
-  const tick = () => OB.runOnce(DB, O.getOrder, D.sendOrder).catch(e => console.error('Очередь:', e.message));
-  setInterval(tick, 30000).unref(); setTimeout(tick, 2000).unref();
-  /* копия базы раз в сутки рядом с файлом базы (хранится 14 последних) */
-  const BK_DIR = process.env.ORDERS_BACKUP_DIR;
-  if (BK_DIR) {
-    const doBackup = () => { try {
-      fs.mkdirSync(BK_DIR, { recursive: true });
-      DBL.backup(DB, path.join(BK_DIR, 'orders-' + new Date().toISOString().slice(0, 10) + '.db'));
-      fs.readdirSync(BK_DIR).filter(f => /^orders-.*\.db$/.test(f)).sort().slice(0, -14).forEach(f => fs.unlinkSync(path.join(BK_DIR, f)));
-    } catch (e) { console.error('Копия базы не сделана:', e.message); } };
-    setInterval(doBackup, 24 * 3600000).unref(); setTimeout(doBackup, 60000).unref();
-  }
+  const where = DBL.describe(process.env.ORDERS_DB);
+  DB_STATE = 'подключается';
+  const initDb = async () => {
+    try {
+      const db = await DBL.open(process.env.ORDERS_DB);
+      await OB.recover(db);
+      ADMIN = require('./lib/admin.js').create({ DB: db, O, D, auth: require('./lib/auth.js').create(process.env.ADMIN_USERS), send, clientIp });
+      DB = db; DB_STATE = 'ok';
+      console.log('База заказов подключена: ' + where);
+      const tick = () => OB.runOnce(DB, O.getOrder, D.sendOrder).catch(e => console.error('Очередь:', e.message));
+      setInterval(tick, 30000).unref(); setTimeout(tick, 2000).unref();
+      /* копия файла базы раз в сутки (только SQLite; у PostgreSQL копии делает хостинг) */
+      const BK_DIR = process.env.ORDERS_BACKUP_DIR;
+      if (BK_DIR && db.kind === 'sqlite') {
+        const doBackup = async () => { try {
+          fs.mkdirSync(BK_DIR, { recursive: true });
+          await DBL.backup(DB, path.join(BK_DIR, 'orders-' + new Date().toISOString().slice(0, 10) + '.db'));
+          fs.readdirSync(BK_DIR).filter(f => /^orders-.*\.db$/.test(f)).sort().slice(0, -14).forEach(f => fs.unlinkSync(path.join(BK_DIR, f)));
+        } catch (e) { console.error('Копия базы не сделана:', e.message); } };
+        setInterval(doBackup, 24 * 3600000).unref(); setTimeout(doBackup, 60000).unref();
+      }
+    } catch (e) {
+      DB_STATE = 'ошибка: ' + String(e.message || e).slice(0, 200);
+      console.error('База заказов (' + where + ') не подключилась, повтор через 30 с:', e.message);
+      setTimeout(initDb, 30000).unref();
+    }
+  };
+  initDb();
 }
 
 const PORT = +process.env.PORT || 3000;
@@ -95,7 +109,8 @@ async function handle(req, res) {
   let p = decodeURIComponent(u.pathname).replace(/\/{2,}/g, '/');
   if (p === '/1c' || p.startsWith('/1c/')) return proxy1c(req, res, u);
   if (p === '/admin' || p.startsWith('/admin/')) {
-    if (!ADMIN) return send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });
+    if (!ADMIN) return DB_STATE ? send(req, res, 503, 'text/plain; charset=utf-8', 'База заказов ещё подключается — обновите страницу через минуту', { 'x-robots-tag': 'noindex', 'retry-after': '30' })
+      : send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });
     return ADMIN(req, res, p === '/admin/' ? '/admin' : p, u);
   }
   if (REDIRECTS[p]) return redirect(res, REDIRECTS[p] + (u.search || ''));
@@ -111,9 +126,13 @@ async function handle(req, res) {
     if (DB) {
       try {
         const c = await D.getCatalog();
-        const r = O.createOrder(DB, order, { items: c.items, source: c.source, at: c.fetchedAt, updated: c.updated }, { channel: 'site' });
+        const r = await O.createOrder(DB, order, { items: c.items, source: c.source, at: c.fetchedAt, updated: c.updated }, { channel: 'site' });
         return send(req, res, 200, 'application/json', JSON.stringify(r), { 'cache-control': 'no-store' });
-      } catch (e) { console.error('Заказ не записан в базу:', e.message); return send(req, res, 500, 'application/json', JSON.stringify({ ok: false, error: 'заказ не сохранился, позвоните нам' })); }
+      } catch (e) {
+        /* база не ответила — заказ не теряем: отправляем сразу в таблицу, как без базы (с пометкой) */
+        console.error('Заказ не записан в базу, отправляю в таблицу:', e.message);
+        order.comment = ('БАЗА НЕДОСТУПНА · ' + (order.comment || '')).slice(0, 500);
+      }
     }
     try {
       const r = await D.sendOrder(order);
@@ -129,7 +148,9 @@ async function handle(req, res) {
   }
   if (p === '/health') {
     const c = await D.getCatalog(), h = { ok: true, items: c.items.length, source: c.source, updated: c.updated, pricesAgeMin: c.fetchedAt ? Math.round((Date.now() - c.fetchedAt) / 60000) : null };
-    if (DB) { try { require('./lib/db.js').check(DB); h.db = 'ok'; h.queue = OB.stats(DB); if (h.queue.failed) h.ok = false; } catch (e) { h.ok = false; h.db = 'ошибка'; } }
+    /* проблемы базы — в поле warn, а не ошибкой: хостинг проверяет /health и перезапускал бы сайт, хотя заказы и без базы уходят в таблицу */
+    if (DB) { try { await require('./lib/db.js').check(DB); h.db = 'ok'; h.queue = await OB.stats(DB); if (h.queue.failed) h.warn = 'есть заказы, не попавшие в таблицу'; } catch (e) { h.db = 'ошибка'; h.warn = 'база не отвечает'; } }
+    else if (DB_STATE) { h.db = DB_STATE === 'подключается' ? DB_STATE : 'ошибка (подробности — в логах приложения)'; h.warn = 'база не подключена — заказы идут сразу в таблицу'; }
     return send(req, res, h.ok ? 200 : 503, 'application/json', JSON.stringify(h), { 'cache-control': 'no-store' });
   }
   if (p === '/favicon.ico') return send(req, res, 200, TYPES['.svg'], fs.readFileSync(path.join(PUB, 'favicon.svg')), { 'cache-control': 'public, max-age=86400' });

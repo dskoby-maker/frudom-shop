@@ -1,5 +1,5 @@
 /* Проверка кабинета менеджера /admin. Тестовая таблица и временная база — настоящих заказов, писем и платежей нет.
-   Запуск: node test/admin-check.js → «ошибок: 0». */
+   Запуск: node test/admin-check.js → «ошибок: 0». С PostgreSQL: ADMIN_DB=postgres://…/пустая_база node test/admin-check.js */
 'use strict';
 const fs = require('fs'), os = require('os'), path = require('path'), { spawn } = require('child_process');
 const { hashPassword } = require('../lib/auth.js');
@@ -27,8 +27,8 @@ const verOf = t => (/name="version" value="(\d+)"/.exec(t) || [])[1];
 
 (async () => {
   run('test/server.js');
-  run('server.js', { PORT: 3007, GS_URL: 'http://localhost:8790/api', ORDERS_DB: path.join(tmp, 'o.db'), ADMIN_USERS: USERS });
-  for (let i = 0; i < 40; i++) { try { const h = await fetch(B + '/health').then(x => x.json()); if (h.source === 'таблица') break; } catch (e) {} await wait(250); }
+  run('server.js', { PORT: 3007, GS_URL: 'http://localhost:8790/api', ORDERS_DB: process.env.ADMIN_DB || path.join(tmp, 'o.db'), ADMIN_USERS: USERS });
+  for (let i = 0; i < 40; i++) { try { const h = await fetch(B + '/health').then(x => x.json()); if (h.source === 'таблица' && h.db === 'ok') break; } catch (e) {} await wait(250); }
   const post = o => fetch(B + '/api/order', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ order: o }) }).then(x => x.json());
   const o1 = await post({ who: 'nonds', zone: 'msk', phone: '+7 999 000-00-01', addr: 'Москва', name: '<script>alert(1)</script>', items: [{ n: 'Морковь', qty: 10 }] });
   const o2 = await post({ who: 'nds', zone: 'msk', phone: '+7 999 000-00-02', addr: 'Москва', items: [{ n: 'Кешью', qty: 5 }],
