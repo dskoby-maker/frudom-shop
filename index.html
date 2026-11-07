@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="description" content="Фруктовый Дом — поставки овощей, фруктов, зелени, сухофруктов, орехов и заморозки для бизнеса в Москве и МО.">
 <title>Фруктовый Дом — поставки продуктов для бизнеса</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --ink:#0f1813; --ink2:#2b352f; --muted:#6d7570; --line:#e3e5e1; --line2:#d3d6d1;
@@ -299,6 +299,125 @@ footer .req{font-size:12.5px;color:var(--muted);margin-top:14px}
 .df button:hover{background:var(--acc2)}
 .df button:disabled{opacity:.35;cursor:not-allowed}
 .empty{text-align:center;color:var(--muted);padding:60px 0;font-size:14px}
+
+/* ===== Новый дизайн (ноябрь 2026): зелёный + оранжевый логотипа, мягкие карточки ===== */
+:root{
+  --ink:#1B2418; --ink2:#34402F; --muted:#5B6657; --line:#E3E8DE; --line2:#D9E0D3;
+  --bg:#fff; --card:#fff; --acc:#2E7D32; --acc2:#1B5E20; --accl:#E7F2E7; --warn:#8A5A12; --warnl:#FFF1E2;
+  --or:#E69A46; --peach:#FFF1E2; --soft:#F4F6F1; --r:12px;
+}
+body{font-family:Onest,Inter,system-ui,sans-serif}
+.h,.fact b,.pr b,.st b,.tot b,.bal b,.ps .num{font-family:Onest,Inter,system-ui,sans-serif}
+.topbar{background:var(--soft);color:var(--muted);border-bottom:1px solid var(--line)}
+.live{color:var(--ink)}.dot{background:var(--acc)}.dot::after{border-color:var(--acc)}
+header{background:rgba(255,255,255,.88)}
+header .wrap{gap:24px}
+.logo .lg{width:44px;height:44px;border-radius:50%;display:block;flex:none;transition:transform .35s var(--ease)}
+header.sc .logo .lg{transform:scale(.86)}
+.logo .t{font-size:16px}
+nav.main a::after{background:var(--acc)}
+nav.main a:hover{color:var(--acc)}
+.lk{border-radius:var(--r);height:44px}
+.cartbtn{background:var(--peach);color:var(--ink);height:44px;border-radius:var(--r)}
+.cartbtn:hover{background:#FFE6CC}
+.cnt{background:var(--or);color:var(--ink)}
+/* главный блок — зелёная панель */
+.hero{padding:28px 0 40px}
+.hero-grid{background:var(--acc);color:#fff;border-radius:28px;padding:clamp(24px,4.5vw,56px);align-items:center;margin:0 20px;max-width:1200px}
+@media(min-width:1240px){.hero-grid{margin:0 auto}}
+.hero .eyebrow{color:#CFE6D0}
+.hero h1{font-weight:700;letter-spacing:-.035em}
+.hero h1 span{color:#FFD9A8}
+.hero .lead{color:#E4F1E4}
+.hero .btn-p{background:#fff;color:var(--acc2)}.hero .btn-p:hover{background:var(--peach)}
+.hero .btn-s{background:transparent;border:1.5px solid rgba(255,255,255,.75);color:#fff}.hero .btn-s:hover{border-color:#fff;background:rgba(255,255,255,.08)}
+.facts{border-top:0;gap:10px;grid-template-columns:1fr 1fr}
+.fact{background:rgba(255,255,255,.1);border:0!important;border-radius:16px;padding:18px!important}
+.fact b{font-size:30px;font-weight:700}.fact span{color:#CFE6D0}
+@media(max-width:960px){.hero-grid{margin:0 16px}.hero h1{font-size:34px}.fact b{font-size:24px}}
+.btn{border-radius:var(--r)}
+.ticker{background:var(--soft);border-color:var(--line)}
+/* как это работает */
+.proc{border-top:0;gap:12px}
+.ps,.ps+.ps{background:var(--soft);border:0!important;border-radius:18px;padding:22px!important}
+.ps .num{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--peach);color:var(--ink);font-weight:700;margin-bottom:24px}
+/* каталог */
+.catbar{background:rgba(255,255,255,.94);backdrop-filter:blur(8px)}
+.cats{gap:8px}
+.cat{height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--line2);background:#fff}
+.cat:hover{background:var(--soft)}
+.cat.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.search{height:40px;border-radius:var(--r);background:var(--soft);border-color:transparent}
+.search:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px rgba(46,125,50,.12);background:#fff}
+.view{border-radius:var(--r)}.view button{height:38px}.view button.on{background:var(--acc)}
+.grid{gap:28px 16px;background:none;border:0;grid-template-columns:repeat(auto-fill,minmax(min(230px,calc(50% - 8px)),1fr))}
+.p{background:#fff;border-radius:0}
+.p:hover{background:#fff}
+.ph{margin:0;border-radius:18px;aspect-ratio:1/1}
+.ph .lbl{left:10px;top:10px;bottom:auto;background:rgba(255,255,255,.92);padding:3px 9px;border-radius:999px;letter-spacing:0;text-transform:none;font-size:11.5px;color:var(--muted);font-weight:500}
+.wtag{border-radius:999px;background:var(--peach);color:var(--warn)}
+.pb{padding:12px 2px 0}
+.sku{font-size:11px}
+.pn{font-weight:500;font-size:15px;line-height:1.35}
+.pr b{font-weight:700;font-size:20px}
+.add{border:0;background:var(--acc);color:#fff;border-radius:var(--r);height:44px}
+.add:hover{background:var(--acc2);color:#fff}
+.act{height:44px}
+.qty{border-radius:var(--r)}.qty button{width:44px;height:44px}
+.ut{border-radius:10px;background:var(--soft);border-color:transparent}
+.ut .pill{background:#fff;box-shadow:0 1px 3px rgba(27,36,24,.14);border-radius:8px}
+.ut button.on{color:var(--ink)}
+.tb i,.bar i{background:var(--acc)}
+.grid.list{gap:0;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.grid.list .p{border-bottom:1px solid var(--line)}
+.grid.list .ph{border-radius:12px}
+.grid.list .pb{padding:10px 16px}
+@media(max-width:600px){
+  .catbar{top:56px}
+  .grid:not(.list){gap:22px 12px}
+  .grid:not(.list) .ph{border-radius:14px}
+  .grid:not(.list) .pn{font-size:14px}
+  .grid:not(.list) .pr{margin:8px 0 6px;flex-wrap:wrap;gap:2px 6px}
+  .grid:not(.list) .pr b{font-size:17px}
+  .grid:not(.list) .pm,.grid:not(.list) .sku{font-size:11.5px}
+  .grid:not(.list) .ut button{font-size:11px;padding:0 2px}
+  .grid:not(.list) .tier{font-size:11.5px}
+  .grid:not(.list) .wtag{font-size:10px;padding:2px 6px}
+  .search input{width:100%}.tools{width:100%}.search{flex:1}
+}
+/* заказчики, условия, подвал */
+.dark{background:#1F3A23}
+.cl-grid{border-top-color:#335238}.cl,.cl:not(:nth-child(3n)){border-color:#335238}
+.cl:hover{background:#244529}
+.law{border-radius:999px;border-color:#4C6D50}
+.terms{gap:12px;background:none;border:0}
+.term{background:var(--soft);border-radius:20px}
+footer{background:var(--soft)}
+footer .flogo{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--ink);font-weight:700;font-size:15px;letter-spacing:0;text-transform:none}
+footer .flogo img{width:40px;height:40px;border-radius:50%}
+@media(max-width:600px){
+  header .wrap{gap:8px;padding:0 12px}
+  .logo{gap:8px}.logo .lg{width:38px;height:38px}.logo .t{font-size:15px}.logo .t small{display:none}
+  .hd-r{gap:6px}.lk{width:44px;padding:0;justify-content:center}
+  .cartbtn{padding:0 10px;gap:6px;font-size:13px}
+  .grid:not(.list) .qty button{width:34px}.grid:not(.list) .qty span{font-size:12px;line-height:1.2;text-align:center}
+}
+@media(max-width:380px){#ctotal{display:none}}
+/* корзина и окна */
+.drawer{border-radius:20px 0 0 20px}
+@media(max-width:500px){.drawer{border-radius:0}}
+.seg{border-radius:var(--r);background:var(--soft);border-color:transparent}
+.seg .pill{background:#fff;box-shadow:0 1px 3px rgba(27,36,24,.14);border-radius:9px}
+.seg button.on{color:var(--ink)}
+.ci .ic{border-radius:10px}
+.tot{border-top-color:var(--line2)}
+.note{border-left:0;border-radius:12px;background:var(--peach)}
+.df button,.bprimary{border-radius:var(--r);background:var(--acc)}
+.df button:hover,.bprimary:hover{background:var(--acc2)}
+.modal{border-radius:20px}
+.fld input{border-radius:10px;height:44px}
+.inn button,.bsec{border-radius:10px}
+.toast{border-radius:12px}
 </style>
 </head>
 <body>
@@ -310,7 +429,7 @@ footer .req{font-size:12.5px;color:var(--muted);margin-top:14px}
 </div></div>
 
 <header id="hd"><div class="wrap">
-  <a href="#" class="logo"><span class="mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 21c-4.5 0-8-3.4-8-8.2C4 8.6 6.6 6 9.4 6c1.2 0 2 .5 2.6.5S13.4 6 14.6 6C17.4 6 20 8.6 20 12.8 20 17.6 16.5 21 12 21Z"/><path d="M12 6c0-2 1.2-3.3 3-3.6"/></svg></span><span class="t">Фруктовый Дом<small>Поставки для бизнеса</small></span></a>
+  <a href="#" class="logo"><img class="lg" src="https://dskoby-maker.github.io/frudom-shop/public/logo.png" alt="" width="44" height="44"><span class="t">Фруктовый Дом<small>Поставки для бизнеса</small></span></a>
   <nav class="main"><a href="#catalog">Каталог</a><a href="#clients">Заказчики</a><a href="#terms">Условия</a><a href="#contacts">Контакты</a></nav>
   <div class="hd-r">
     <a class="phone" href="tel:+79998330553">+7 999 833-05-53</a>
@@ -410,7 +529,7 @@ footer .req{font-size:12.5px;color:var(--muted);margin-top:14px}
 </div></section>
 
 <footer id="contacts"><div class="wrap">
-  <div><b>Фруктовый Дом</b>Поставки продуктов питания для бизнеса и государственных учреждений Москвы и Московской области.<div class="req">ИП Скобёлкин Д.В. · ОГРНИП 324774600023327</div></div>
+  <div><b class="flogo"><img src="https://dskoby-maker.github.io/frudom-shop/public/logo.png" alt="" width="40" height="40">Фруктовый Дом</b>Поставки продуктов питания для бизнеса и государственных учреждений Москвы и Московской области.<div class="req">ИП Скобёлкин Д.В. · ОГРНИП 324774600023327</div></div>
   <div><b>Связь</b>+7 999 833-05-53<br>info@frudom.ru<br>Мессенджер MAX</div>
   <div><b>Склад</b>Москва, ул. Мелитопольская,<br>д. 1, к. 2, стр. 2</div>
   <div><b>Режим</b>Пн–Пт 9:00–18:00<br>Сб 9:00–17:00</div>
@@ -440,7 +559,7 @@ const IC={
  nut:'<path d="M12 3c4 0 7 3.5 7 8.5S16 21 12 21 5 16.5 5 11.5 8 3 12 3Z"/><path d="M12 3v18M8 8c1.5 1 6.5 1 8 0"/>',
  frz:'<path d="M12 2v20M3.5 7l17 10M3.5 17l17-10"/><path d="m9 4 3 2 3-2M9 20l3-2 3 2"/>'
 };
-const CT={"Овощи":["veg","#e9eee4"],"Фрукты и ягоды":["fruit","#f1ebe3"],"Зелень":["herb","#e4ede6"],"Сухофрукты":["dry","#f2ece2"],"Орехи и семена":["nut","#ece8e1"],"Заморозка":["frz","#e5eaee"]};
+const CT={"Овощи":["veg","#E7F2E7"],"Фрукты и ягоды":["fruit","#FFF1E2"],"Зелень":["herb","#EAF4E2"],"Сухофрукты":["dry","#F6EEDF"],"Орехи и семена":["nut","#FFF6D9"],"Заморозка":["frz","#EAF1F6"]};
 let P=[];
 let cats=["Все"];
 let cur="Все",q="",cart={},mode={},who="nonds",zone="msk",view="grid";
@@ -456,7 +575,7 @@ const unit=(p,k,m)=>!p.pk||m=="pack"||k>=p.th?p.p:p.pk;
 const ql=(p,k,m)=>{if(p.pk&&m=="pack"){const n=Math.round(k/p.step);return `${n} ${pl(n,p.pn)} · ≈${fmt(k)} кг`}return `${fmt(k)} ${p.u}`};
 const $=id=>document.getElementById(id);
 const f=n=>Math.round(n).toLocaleString("ru-RU")+" ₽";
-const ct=c=>CT[c]||["dry","#eceae4"];
+const ct=c=>CT[c]||["dry","#F4F6F1"];
 const icon=(c,sz)=>`<svg viewBox="0 0 24 24" fill="none" stroke="#3d4a42" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">${IC[ct(c)[0]]}</svg>`;
 
 // ticker
