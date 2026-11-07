@@ -3,10 +3,11 @@ const http = require('http'), fs = require('fs'), path = require('path'), zlib =
 const D = require('./lib/data.js'), R = require('./lib/render.js');
 
 /* База заказов включается переменной ORDERS_DB (путь к файлу базы). Без неё — как раньше: заказ сразу уходит в Google Таблицу. */
-let DB = null, O = null, OB = null;
+let DB = null, O = null, OB = null, ADMIN = null;   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
 if (process.env.ORDERS_DB) {
   const DBL = require('./lib/db.js'); O = require('./lib/orders.js'); OB = require('./lib/outbox.js');
   DB = DBL.open(process.env.ORDERS_DB);
+  ADMIN = require('./lib/admin.js').create({ DB, O, D, auth: require('./lib/auth.js').create(process.env.ADMIN_USERS), send, clientIp });
   OB.recover(DB);
   const tick = () => OB.runOnce(DB, O.getOrder, D.sendOrder).catch(e => console.error('Очередь:', e.message));
   setInterval(tick, 30000).unref(); setTimeout(tick, 2000).unref();
@@ -93,6 +94,10 @@ async function handle(req, res) {
   const u = new URL(req.url, 'http://local');
   let p = decodeURIComponent(u.pathname).replace(/\/{2,}/g, '/');
   if (p === '/1c' || p.startsWith('/1c/')) return proxy1c(req, res, u);
+  if (p === '/admin' || p.startsWith('/admin/')) {
+    if (!ADMIN) return send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });
+    return ADMIN(req, res, p === '/admin/' ? '/admin' : p, u);
+  }
   if (REDIRECTS[p]) return redirect(res, REDIRECTS[p] + (u.search || ''));
   if (p.length > 1 && p.endsWith('/')) return redirect(res, p.replace(/\/+$/, '') + (u.search || ''));
 
