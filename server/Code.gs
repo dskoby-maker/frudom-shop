@@ -7,6 +7,9 @@
  * Что умеет:
  *   ?action=shopCatalog            — отдаёт товары с листа «Витрина» (где «Показывать» = да)
  *   POST {action:"shopOrder", ...} — принимает заказ, пишет строку на лист «Заказы с сайта» и шлёт письмо владельцу
+ *   POST {action:"shopMail", key, to, subject, text, html} — письмо покупателю (код входа в личный кабинет).
+ *        Ключ key сайт присылает сам; первый присланный ключ запоминается (свойство MAIL_KEY), чужой ключ — отказ.
+ *        Если сайт переехал или ключ сменился: Apps Script → Настройки проекта → Свойства скрипта → удалить MAIL_KEY.
  */
 
 /* Запустите один раз вручную (выбрать authorize → Выполнить → Разрешить), чтобы скрипт мог отправлять письма */
@@ -24,6 +27,7 @@ function handle_(p) {
   try {
     if (p.action === 'shopCatalog') return shopCatalog_();
     if (p.action === 'shopOrder') return shopOrder_(p);
+    if (p.action === 'shopMail') return shopMail_(p);
     return { ok: true, shop: 'frudom', hint: 'используйте action=shopCatalog' };
   } catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 200) }; }
 }
@@ -163,3 +167,20 @@ function shopOrder_(p) {
   return res;
 }
 
+
+
+/* ===== Письмо покупателю (код входа в личный кабинет) ===== */
+function shopMail_(p) {
+  const key = String(p.key || '');
+  if (!/^[A-Za-z0-9_-]{24,80}$/.test(key)) return { ok: false, code: 'key', error: 'нет ключа' };
+  const pr = PropertiesService.getScriptProperties(), was = pr.getProperty('MAIL_KEY');
+  if (!was) pr.setProperty('MAIL_KEY', key);
+  else if (was !== key) return { ok: false, code: 'mail_key', error: 'ключ почты не совпадает (удалите свойство MAIL_KEY в настройках скрипта)' };
+  const to = String(p.to || '').trim().slice(0, 120);
+  if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(to)) return { ok: false, code: 'to', error: 'неверный адрес' };
+  if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, code: 'quota', error: 'лимит писем Google на сегодня исчерпан' };
+  const opt = { name: 'Фруктовый Дом' };
+  if (p.html) opt.htmlBody = String(p.html).slice(0, 20000);
+  MailApp.sendEmail(to, String(p.subject || 'Фруктовый Дом').slice(0, 200), String(p.text || '').slice(0, 5000), opt);
+  return { ok: true };
+}
