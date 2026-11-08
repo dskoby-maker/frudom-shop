@@ -1,10 +1,10 @@
 /* Сайт frudom.ru: страницы каталога, корзина, приём заказов. Запуск: node server.js (порт из PORT, по умолчанию 3000). */
 const http = require('http'), fs = require('fs'), path = require('path'), zlib = require('zlib');
-const D = require('./lib/data.js'), R = require('./lib/render.js');
+const D = require('./lib/data.js'), R = require('./lib/render.js'), ART = require('./public/art.js');
 
 /* База заказов включается переменной ORDERS_DB: адрес облачной PostgreSQL (postgres://…) или путь к файлу SQLite (для проверки).
    Без неё — как раньше: заказ сразу уходит в Google Таблицу. Пока база не подключилась (или недоступна) — тоже в таблицу, заказы не теряются. */
-let DB = null, O = null, OB = null, ADMIN = null, DB_STATE = null;   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
+let DB = null, O = null, OB = null, ADMIN = null, ACC = null, DB_STATE = null;   /* ACC — личный кабинет покупателя /account */   /* ADMIN — кабинет менеджера /admin (только вместе с базой) */
 if (process.env.ORDERS_DB) {
   const DBL = require('./lib/db.js'); O = require('./lib/orders.js'); OB = require('./lib/outbox.js');
   const where = DBL.describe(process.env.ORDERS_DB);
@@ -14,6 +14,7 @@ if (process.env.ORDERS_DB) {
       const db = await DBL.open(process.env.ORDERS_DB);
       await OB.recover(db);
       ADMIN = require('./lib/admin.js').create({ DB: db, O, D, auth: require('./lib/auth.js').create(process.env.ADMIN_USERS), send, clientIp });
+      ACC = require('./lib/account.js').create({ DB: db, D, R, send, clientIp });
       DB = db; DB_STATE = 'ok';
       console.log('База заказов подключена: ' + where);
       const tick = () => OB.runOnce(DB, O.getOrder, D.sendOrder).catch(e => console.error('Очередь:', e.message));
@@ -83,7 +84,7 @@ function cleanOrder(o) {
   const items = Array.isArray(o.items) ? o.items.slice(0, 81).map(l => (l && typeof l === 'object') ? { n: s_(l.n, 120), qty: typeof l.qty === 'number' ? l.qty : s_(l.qty, 20), mode: s_(l.mode, 8) } : {}) : [];
   const co = o.company && typeof o.company === 'object' ? o.company : null;
   const out = { who: s_(o.who, 8), zone: s_(o.zone, 8), items, name: s_(o.name, 100), phone: s_(o.phone, 40), email: s_(o.email, 100), addr: s_(o.addr, 300),
-    comment: s_(o.comment, 500), total: typeof o.total === 'number' ? o.total : s_(o.total, 20), key: s_(o.key, 64), hp: s_(o.hp, 50) };
+    comment: s_(o.comment, 500), total: typeof o.total === 'number' ? o.total : s_(o.total, 20), key: s_(o.key, 64), hp: s_(o.hp, 50), src: s_(o.src, 300) };
   if (co) out.company = ['inn', 'kpp', 'ogrn', 'name', 'addr', 'email', 'phone', 'daddr'].reduce((m, k) => { m[k] = s_(co[k], 300); return m; }, {});
   Object.keys(out).forEach(k => out[k] === undefined && delete out[k]);
   return out;
@@ -113,6 +114,13 @@ async function handle(req, res) {
       : send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });
     return ADMIN(req, res, p === '/admin/' ? '/admin' : p, u);
   }
+  if (p === '/account' || p.startsWith('/account/') || p === '/api/me' || p === '/api/me/company') {
+    if (ACC) return ACC(req, res, p, u);
+    if (p.startsWith('/api/')) return send(req, res, 200, 'application/json', JSON.stringify({ ok: false }), { 'cache-control': 'no-store' });
+    const cat = await D.getCatalog();
+    return send(req, res, 200, 'text/html; charset=utf-8', R.layout({ path: '/account', noindex: true, noLoc: true, tab: 'account', title: 'Личный кабинет | Фруктовый Дом', desc: 'Личный кабинет покупателя',
+      body: '<section class="sec pg"><div class="wrap acc"><div class="acc-card acc-login"><h1>Личный кабинет</h1><p class="intro">' + (DB_STATE ? 'Кабинет подключается — обновите страницу через минуту.' : 'Личный кабинет скоро заработает.') + ' Заказы принимаются как обычно, статус подскажет менеджер: +7 999 833-05-53.</p><a class="btnp" href="/catalog" style="width:100%">В каталог</a></div></div></section>' }, cat), { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
+  }
   if (REDIRECTS[p]) return redirect(res, REDIRECTS[p] + (u.search || ''));
   if (p.length > 1 && p.endsWith('/')) return redirect(res, p.replace(/\/+$/, '') + (u.search || ''));
 
@@ -126,7 +134,8 @@ async function handle(req, res) {
     if (DB) {
       try {
         const c = await D.getCatalog();
-        const r = await O.createOrder(DB, order, { items: c.items, source: c.source, at: c.fetchedAt, updated: c.updated }, { channel: 'site' });
+        const cid = await require('./lib/account.js').customerId(DB, req).catch(() => null);
+        const r = await O.createOrder(DB, order, { items: c.items, source: c.source, at: c.fetchedAt, updated: c.updated }, { channel: 'site', customerId: cid });
         return send(req, res, 200, 'application/json', JSON.stringify(r), { 'cache-control': 'no-store' });
       } catch (e) {
         /* база не ответила — заказ не теряем: отправляем сразу в таблицу, как без базы (с пометкой) */
@@ -134,6 +143,7 @@ async function handle(req, res) {
         order.comment = ('БАЗА НЕДОСТУПНА · ' + (order.comment || '')).slice(0, 500);
       }
     }
+    delete order.src;                                       /* в таблицу заказ уходит как раньше */
     try {
       const r = await D.sendOrder(order);
       return send(req, res, 200, 'application/json', JSON.stringify(r && typeof r === 'object' ? r : { ok: false, error: 'сервер заказов не ответил' }), { 'cache-control': 'no-store' });
@@ -156,6 +166,18 @@ async function handle(req, res) {
   if (p === '/favicon.ico') return send(req, res, 200, TYPES['.svg'], fs.readFileSync(path.join(PUB, 'favicon.svg')), { 'cache-control': 'public, max-age=86400' });
 
   const cat = await D.getCatalog();
+  /* нарисованные картинки товаров и категорий (SVG); если в таблице есть своё фото — на сайте показывается оно */
+  const im = p.match(/^\/img\/(p|c|hero)\/(?:([a-z0-9-]+)\/)?([a-z0-9-]+)\.svg$/);
+  if (im) {
+    let svg = null;
+    if (im[1] === 'p') { const it = cat.items.find(x => x.cs === im[2] && x.slug === im[3]); if (it) svg = ART.fileItem(it); }
+    else if (im[1] === 'c' && !im[2]) { const c = D.CATS.find(x => x.slug === im[3]); if (c) svg = ART.fileCat(c.name); }
+    else if (im[1] === 'hero' && !im[2] && ART.hero[im[3]]) svg = ART.fileHero(im[3]);
+    if (svg) return send(req, res, 200, 'image/svg+xml', svg, { 'cache-control': 'public, max-age=86400' });
+    return send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено');
+  }
+  if (p === '/feed/yandex.yml' || p === '/feed/yandex.xml') return send(req, res, 200, 'application/xml; charset=utf-8', R.feedYandex(cat), { 'cache-control': 'public, max-age=900' });
+  if (p === '/feed/google.xml') return send(req, res, 200, 'application/xml; charset=utf-8', R.feedGoogle(cat), { 'cache-control': 'public, max-age=900' });
   if (p === '/robots.txt') return send(req, res, 200, 'text/plain; charset=utf-8', R.robots());
   if (p === '/sitemap.xml') return send(req, res, 200, 'application/xml; charset=utf-8', R.sitemap(cat));
   if (p === '/') return html(req, res, R.pageHome(cat));

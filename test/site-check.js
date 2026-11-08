@@ -24,6 +24,14 @@ const mock = (port, fn) => http.createServer(fn).listen(port);
   let r = await get('/1c'); if (r.s !== 200 || !/TILDA-1C \/1c/.test(r.t)) fail.push('/1c не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/1c → Тильда ✓');
   r = await get('/1c?redir=1'); if (r.s !== 301 || r.loc !== '/1c/?redir=1') fail.push('/1c при перенаправлении Тильды: ' + r.s + ' ' + r.loc);
   r = await get('/1c/?redir=1'); if (!/DOCS \/\?redir=1/.test(r.t)) fail.push('/1c/ запасной (GitHub) не сработал: ' + r.t.slice(0, 60)); else log('/1c → запасной GitHub ✓');
+  /* реклама: фиды, картинки, robots */
+  const yml = (await get('/feed/yandex.yml')).t, gf = (await get('/feed/google.xml')).t;
+  if (!/<offer id="kartofel"[\s\S]*?<price>70\.35<\/price>/.test(yml) || !/<picture>https:\/\/frudom\.ru\/assets\/img\/(p|c)\//.test(yml)) fail.push('фид Яндекса: нет товара, цены или картинки');
+  if (!/<g:id>kartofel<\/g:id>/.test(gf) || !/<g:price>70\.35 RUB<\/g:price>/.test(gf)) fail.push('фид Google: нет товара или цены');
+  for (const u of ['/img/p/ovoshchi/kartofel.svg', '/img/c/ovoshchi.svg', '/img/hero/hero1.svg']) { const r2 = await get(u); if (r2.s !== 200 || !/^<svg xmlns/.test(r2.t)) fail.push(u + ': картинка не отдаётся'); }
+  if ((await get('/img/p/ovoshchi/net-takogo.svg')).s !== 404) fail.push('картинка несуществующего товара должна быть 404');
+  if (!/Disallow: \/account/.test((await get('/robots.txt')).t)) fail.push('robots: личный кабинет не закрыт');
+  if (!/Личный кабинет скоро/.test((await get('/account')).t)) fail.push('кабинет без базы: нет понятного сообщения');
   const sm = (await get('/sitemap.xml')).t; if (!sm.includes('https://frudom.ru/catalog/ovoshchi/kartofel')) fail.push('в sitemap нет страницы товара');
   if (sm.includes('/catalog/zelen<')) fail.push('в sitemap пустая категория');
   const fb = await (await fetch('http://localhost:3002/health')).json(); if (fb.items < 50 || fb.source !== 'запасной файл') fail.push('запасной каталог не включился: ' + JSON.stringify(fb)); else log('запасной каталог: ' + fb.items + ' товаров ✓');
@@ -54,17 +62,18 @@ const mock = (port, fn) => http.createServer(fn).listen(port);
       const sw = await p.evaluate(() => document.documentElement.scrollWidth); if (sw > w) fail.push(name + ' ' + u + ': прокрутка вбок ' + sw);
     }
     await p.goto(B + '/catalog/ovoshchi/kartofel');
+    await p.click('.prod [data-mode="pack"]'); await p.waitForTimeout(450);               // мешком
     await p.click('.prod [data-add]'); await p.waitForTimeout(300);                       // 1 мешок
     if (!/1 мешок/.test(await p.textContent('.prod .qv'))) fail.push(name + ': на странице товара не добавился мешок');
     await p.goto(B + '/catalog/ovoshchi');                                                // корзина переносится
     if (!/1 мешок/.test(await p.textContent('.p[data-slug="kartofel"] .qv'))) fail.push(name + ': корзина не сохранилась при переходе');
-    await p.click('.p[data-slug="kartofel"] [data-mode="kg"]'); await p.waitForTimeout(500);
+    await p.click('#buy [data-v="opt"]'); await p.waitForTimeout(300); await p.click('#buy [data-v="retail"]'); await p.waitForTimeout(500);   // розница = по кг
     for (let i = 0; i < 6; i++) { await p.click('.p[data-slug="kartofel"] [data-q="-1"]'); await p.waitForTimeout(80); } // 25 → 19 кг: цена поштучная
     const pr = await p.textContent('.p[data-slug="kartofel"] .pr b');
     if (!/70,35/.test(pr)) fail.push(name + ': ниже 20 кг цена должна быть 70,35, а показано ' + pr);
     await p.click('.p[data-slug="kartofel"] [data-q="1"]'); await p.waitForTimeout(300);  // 20 кг → опт
     if (!/63,95/.test(await p.textContent('.p[data-slug="kartofel"] .pr b'))) fail.push(name + ': от 20 кг не включился опт');
-    if (name === 'телефон') { await p.click('.burger'); await p.waitForTimeout(500); if (!(await p.isVisible('#mnav a'))) fail.push('мобильное меню не открылось'); await p.click('.burger'); }
+    if (name === 'телефон') { await p.click('.burger'); await p.waitForTimeout(600); if (!(await p.isVisible('#mnav a'))) fail.push('мобильное меню не открылось'); await p.click('[data-close="menu"]'); await p.waitForTimeout(500); }
     await p.click('[data-open="cart"]'); await p.waitForTimeout(600);
     await p.click('#pay'); await p.waitForSelector('#g_phone');
     await p.fill('#g_phone', '+7 999 111-22-33'); await p.fill('#g_addr', 'Москва, Тестовая 1'); await p.click('#g_send');

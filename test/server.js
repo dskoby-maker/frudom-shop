@@ -19,7 +19,7 @@ const ctx={SpreadsheetApp:{getActive:()=>ss},LockService:{getScriptLock:()=>({wa
   ContentService:{MimeType:{JSON:'json'},createTextOutput:t=>({t,setMimeType(){return this}})},
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v},deleteProperty:k=>{delete props[k]}})},
   Session:{getScriptTimeZone:()=>'Europe/Moscow',getEffectiveUser:()=>({getEmail:()=>'owner@test'})},
-  MailApp:{sent:[],sendEmail(to,subj,body){this.sent.push({to,subj})},getRemainingDailyQuota:()=>100},
+  MailApp:{sent:[],sendEmail(to,subj,body,opt){this.sent.push({to,subj,body,name:opt&&opt.name})},getRemainingDailyQuota:()=>100},
   Utilities:{formatDate:(d,tz,f)=>{const m=new Date(d.getTime()+3*3600000),p=n=>String(n).padStart(2,'0');
     return f.replace('yyyy',m.getUTCFullYear()).replace('MM',p(m.getUTCMonth()+1)).replace('dd',p(m.getUTCDate())).replace('HH',p(m.getUTCHours())).replace('mm',p(m.getUTCMinutes()))}},
   JSON,String,Math,Object,parseInt,parseFloat,Date,isNaN,Array};
