@@ -25,11 +25,11 @@ const lineOf = t => { const m = /<textarea[^>]*>([^<]*)<\/textarea>/.exec(t); re
   /* два пользователя → одна строка */
   t = await post('/admin/setup', { name: 'Даниил', role: 'admin', pw: 'очень-длинный-1', pw2: 'очень-длинный-1' }).then(x => x.text());
   let line = lineOf(t);
-  ok(line && /^Даниил:admin:scrypt\$/.test(line) && !/очень-длинный/.test(t), '4. строка для первого: ' + line);
+  ok(line && /^Даниил:admin:scrypt\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(line) && !/очень-длинный/.test(t), '4. строка для первого: ' + line);
   const f2 = new URLSearchParams({ name: 'Наталья', role: 'manager', pw: 'пароль-наталья-2', pw2: 'пароль-наталья-2' }); f2.append('acc[]', line);
   t = await fetch(B + '/admin/setup', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: B }, body: f2.toString() }).then(x => x.text());
   line = lineOf(t);
-  ok(line && line.split(';').length === 2 && /;Наталья:manager:scrypt\$/.test(line), '5. строка для двоих: ' + line);
+  ok(line && line.split(';').length === 2 && /;Наталья:manager:scrypt\./.test(line), '5. строка для двоих: ' + line);
   /* подделанная строка в скрытом поле не проходит */
   const f3 = new URLSearchParams({ name: 'Склад', role: 'viewer', pw: 'пароль-склад-33', pw2: 'пароль-склад-33' }); f3.append('acc[]', 'Хакер:admin:plain');
   ok(!/Хакер/.test(lineOf(await fetch(B + '/admin/setup', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: B }, body: f3.toString() }).then(x => x.text())) || ''), '6. принята подделанная строка');
