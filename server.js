@@ -43,6 +43,10 @@ const PORT = +process.env.PORT || 3000;
    Если Тильда не отдаёт страницу (например, перенаправляет), показываем тот же генератор с GitHub. */
 const TILDA_ORIGIN = (process.env.TILDA_ORIGIN || 'https://project8349547.tilda.ws').replace(/\/$/, '');
 const DOCS_ORIGIN = (process.env.DOCS_ORIGIN || 'https://dskoby-maker.github.io/frudom-docs').replace(/\/$/, '');
+/* Страницы, которые остаются на Тильде и открываются через этот сервер как есть (frudom.ru/1c — генератор документов, frudom.ru/pdf — редактор PDF).
+   Свои добавить: TILDA_PATHS="/1c,/pdf,/ещё" в настройках сервера. */
+const TILDA_PATHS = (process.env.TILDA_PATHS || '/1c,/pdf').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(x => /^\/[^/]/.test(x));
+const isTilda = p => TILDA_PATHS.some(t => p === t || p.startsWith(t + '/'));
 const REDIRECTS = { '/magazin': '/catalog', '/where': '/kontakty', '/test': '/', '/index.html': '/', '/catalog/': '/catalog' };
 const PUB = path.join(__dirname, 'public');
 const TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.txt': 'text/plain; charset=utf-8' };
@@ -105,10 +109,25 @@ async function proxy1c(req, res, u) {
   }
 }
 
+/* остальные страницы Тильды (редактор PDF и т. п.): как есть, без запасного варианта */
+async function proxyTilda(req, res, u) {
+  try {
+    const r = await fetch(TILDA_ORIGIN + u.pathname + u.search, { redirect: 'manual', headers: { 'user-agent': req.headers['user-agent'] || 'frudom-site' } });
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get('location') || '/';
+      const to = new URL(loc, TILDA_ORIGIN + u.pathname);
+      res.writeHead(302, { location: (to.origin === new URL(TILDA_ORIGIN).origin || /(^|\.)frudom\.ru$/.test(to.hostname)) ? to.pathname + to.search : '/', 'cache-control': 'no-cache' }); return res.end();
+    }
+    if (r.status !== 200) throw new Error('HTTP ' + r.status);
+    return send(req, res, 200, r.headers.get('content-type') || 'text/html; charset=utf-8', Buffer.from(await r.arrayBuffer()), { 'cache-control': 'no-cache', 'x-robots-tag': 'noindex' });
+  } catch (e) { return send(req, res, 502, 'text/plain; charset=utf-8', 'Страница временно недоступна, обновите через минуту', { 'x-robots-tag': 'noindex' }); }
+}
+
 async function handle(req, res) {
   const u = new URL(req.url, 'http://local');
   let p = decodeURIComponent(u.pathname).replace(/\/{2,}/g, '/');
   if (p === '/1c' || p.startsWith('/1c/')) return proxy1c(req, res, u);
+  if (isTilda(p)) return proxyTilda(req, res, u);
   if (p === '/admin' || p.startsWith('/admin/')) {
     if (!ADMIN) return DB_STATE ? send(req, res, 503, 'text/plain; charset=utf-8', 'База заказов ещё подключается — обновите страницу через минуту', { 'x-robots-tag': 'noindex', 'retry-after': '30' })
       : send(req, res, 404, 'text/plain; charset=utf-8', 'Не найдено', { 'x-robots-tag': 'noindex' });

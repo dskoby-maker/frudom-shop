@@ -22,6 +22,10 @@ const mock = (port, fn) => http.createServer(fn).listen(port);
     const r = await get(u); if (r.s !== code) fail.push(u + ': код ' + r.s + ' вместо ' + code);
   }
   let r = await get('/1c'); if (r.s !== 200 || !/TILDA-1C \/1c/.test(r.t)) fail.push('/1c не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/1c → Тильда ✓');
+  r = await get('/pdf'); if (r.s !== 200 || !/TILDA-1C \/pdf/.test(r.t)) fail.push('/pdf не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/pdf → Тильда ✓');
+  r = await get('/pdf/?redir=1'); if (r.s !== 302 || r.loc !== '/1c') fail.push('/pdf перенаправление Тильды: ' + r.s + ' ' + r.loc);
+  r = await get('/pdfx'); if (/TILDA/.test(r.t)) fail.push('/pdfx ушёл в Тильду');
+  r = await get('/robots.txt'); if (!/Disallow: \/pdf/.test(r.t)) fail.push('robots без /pdf');
   r = await get('/1c?redir=1'); if (r.s !== 301 || r.loc !== '/1c/?redir=1') fail.push('/1c при перенаправлении Тильды: ' + r.s + ' ' + r.loc);
   r = await get('/1c/?redir=1'); if (!/DOCS \/\?redir=1/.test(r.t)) fail.push('/1c/ запасной (GitHub) не сработал: ' + r.t.slice(0, 60)); else log('/1c → запасной GitHub ✓');
   /* реклама: фиды, картинки, robots */
