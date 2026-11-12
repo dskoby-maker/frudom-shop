@@ -9,7 +9,7 @@ function run(file, env) { const p = spawn('node', [file], { cwd: ROOT, env: Obje
 const mock = (port, fn) => http.createServer(fn).listen(port);
 
 (async () => {
-  const tilda = mock(8791, (q, s) => { if (/redir/.test(q.url)) { s.writeHead(302, { location: 'https://frudom.ru/1c' }); return s.end(); } s.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); s.end('<html>TILDA-1C ' + q.url + '</html>'); });
+  const tilda = mock(8791, (q, s) => { if (/loop/.test(q.url)) { s.writeHead(301, { location: 'https://frudom.ru/pdf' }); return s.end(); } if (/redir/.test(q.url)) { s.writeHead(302, { location: 'https://frudom.ru/1c' }); return s.end(); } s.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); s.end('<html>TILDA-1C ' + q.url + '</html>'); });
   const docs = mock(8792, (q, s) => { s.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); s.end('<html>DOCS ' + q.url + '</html>'); });
   run('test/server.js');
   run('server.js', { PORT: 3001, GS_URL: 'http://localhost:8790/api', TILDA_ORIGIN: 'http://localhost:8791', DOCS_ORIGIN: 'http://localhost:8792' });
@@ -24,6 +24,7 @@ const mock = (port, fn) => http.createServer(fn).listen(port);
   let r = await get('/1c'); if (r.s !== 200 || !/TILDA-1C \/1c/.test(r.t)) fail.push('/1c не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/1c → Тильда ✓');
   r = await get('/pdf'); if (r.s !== 200 || !/TILDA-1C \/pdf/.test(r.t)) fail.push('/pdf не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/pdf → Тильда ✓');
   r = await get('/pdf/?redir=1'); if (r.s !== 302 || r.loc !== '/1c') fail.push('/pdf перенаправление Тильды: ' + r.s + ' ' + r.loc);
+  r = await get('/pdf?loop=1'); if (r.s !== 502) fail.push('/pdf: Тильда шлёт на frudom.ru/pdf — должен быть 502, а не круг: ' + r.s + ' ' + r.loc);
   r = await get('/pdfx'); if (/TILDA/.test(r.t)) fail.push('/pdfx ушёл в Тильду');
   r = await get('/robots.txt'); if (!/Disallow: \/pdf/.test(r.t)) fail.push('robots без /pdf');
   r = await get('/1c?redir=1'); if (r.s !== 301 || r.loc !== '/1c/?redir=1') fail.push('/1c при перенаправлении Тильды: ' + r.s + ' ' + r.loc);
