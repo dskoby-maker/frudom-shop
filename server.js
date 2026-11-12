@@ -47,6 +47,8 @@ const DOCS_ORIGIN = (process.env.DOCS_ORIGIN || 'https://dskoby-maker.github.io/
    Свои добавить: TILDA_PATHS="/1c,/pdf,/ещё" в настройках сервера. */
 const TILDA_PATHS = (process.env.TILDA_PATHS || '/1c,/pdf').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(x => /^\/[^/]/.test(x));
 const isTilda = p => TILDA_PATHS.some(t => p === t || p.startsWith(t + '/'));
+const SITE_URL = (process.env.SITE_URL || 'https://frudom.ru').replace(/\/$/, ''), SITE_HOST = new URL(SITE_URL).hostname.toLowerCase();
+const TECH_HOST = h => /\.twc1\.net$/.test(h);
 const REDIRECTS = { '/magazin': '/catalog', '/where': '/kontakty', '/test': '/', '/index.html': '/', '/catalog/': '/catalog' };
 const PUB = path.join(__dirname, 'public');
 const TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.txt': 'text/plain; charset=utf-8' };
@@ -128,6 +130,11 @@ async function proxyTilda(req, res, u) {
 async function handle(req, res) {
   const u = new URL(req.url, 'http://local');
   let p = decodeURIComponent(u.pathname).replace(/\/{2,}/g, '/');
+  /* www.frudom.ru → frudom.ru (одна копия сайта для поисковиков, один вход в кабинеты) */
+  const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+  if (host.startsWith('www.') && host.slice(4) === SITE_HOST) return redirect(res, SITE_URL + u.pathname + u.search);
+  /* технический адрес хостинга (…twc1.net) не индексировать — в поиске только frudom.ru */
+  if (TECH_HOST(host)) res.setHeader('x-robots-tag', 'noindex, nofollow');
   if (p === '/1c' || p.startsWith('/1c/')) return proxy1c(req, res, u);
   if (isTilda(p)) return proxyTilda(req, res, u);
   if (p === '/admin' || p.startsWith('/admin/')) {

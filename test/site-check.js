@@ -22,7 +22,15 @@ const mock = (port, fn) => http.createServer(fn).listen(port);
     const r = await get(u); if (r.s !== code) fail.push(u + ': код ' + r.s + ' вместо ' + code);
   }
   let r = await get('/1c'); if (r.s !== 200 || !/TILDA-1C \/1c/.test(r.t)) fail.push('/1c не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/1c → Тильда ✓');
-  r = await get('/pdf'); if (r.s !== 200 || !/TILDA-1C \/pdf/.test(r.t)) fail.push('/pdf не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/pdf → Тильда ✓');
+  /* www → frudom.ru, технический адрес хостинга — не в поиск */
+  const hostGet = (h, u) => new Promise((ok, no) => http.get({ host: 'localhost', port: 3001, path: u, headers: { host: h } }, q => { q.resume(); q.on('end', () => ok(q)); }).on('error', no));
+  let hq = await hostGet('www.frudom.ru', '/catalog?x=1');
+  if (hq.statusCode !== 301 || hq.headers.location !== 'https://frudom.ru/catalog?x=1') fail.push('www не перенаправляется: ' + hq.statusCode + ' ' + hq.headers.location); else log('www → frudom.ru ✓');
+  hq = await hostGet('dskoby-maker-frudom-shop-f7c8.twc1.net', '/');
+  if (hq.statusCode !== 200 || !/noindex/.test(hq.headers['x-robots-tag'] || '')) fail.push('технический адрес не закрыт от поиска'); else log('…twc1.net → noindex ✓');
+  hq = await hostGet('frudom.ru', '/');
+  if (hq.statusCode !== 200 || hq.headers['x-robots-tag']) fail.push('frudom.ru закрыт от поиска или не открылся'); else log('frudom.ru открыт для поиска ✓');
+  r = await get('/pdf');if (r.s !== 200 || !/TILDA-1C \/pdf/.test(r.t)) fail.push('/pdf не пропущен в Тильду: ' + r.s + ' ' + r.t.slice(0, 60)); else log('/pdf → Тильда ✓');
   r = await get('/pdf/?redir=1'); if (r.s !== 302 || r.loc !== '/1c') fail.push('/pdf перенаправление Тильды: ' + r.s + ' ' + r.loc);
   r = await get('/pdf?loop=1'); if (r.s !== 502) fail.push('/pdf: Тильда шлёт на frudom.ru/pdf — должен быть 502, а не круг: ' + r.s + ' ' + r.loc);
   r = await get('/pdfx'); if (/TILDA/.test(r.t)) fail.push('/pdfx ушёл в Тильду');
