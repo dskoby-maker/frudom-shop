@@ -116,6 +116,8 @@ async function proxyTilda(req, res, u) {
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get('location') || '/';
       const to = new URL(loc, TILDA_ORIGIN + u.pathname);
+      /* Тильда отправляет обратно на frudom.ru ту же страницу (в Тильде ещё указан домен) — не крутить по кругу */
+      if (/(^|\.)frudom\.ru$/.test(to.hostname) && to.pathname.replace(/\/+$/, '') === u.pathname.replace(/\/+$/, '')) throw new Error('loop');
       res.writeHead(302, { location: (to.origin === new URL(TILDA_ORIGIN).origin || /(^|\.)frudom\.ru$/.test(to.hostname)) ? to.pathname + to.search : '/', 'cache-control': 'no-cache' }); return res.end();
     }
     if (r.status !== 200) throw new Error('HTTP ' + r.status);
